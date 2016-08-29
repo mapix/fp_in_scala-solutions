@@ -47,7 +47,7 @@ sealed trait Stream[+A] {
     foldRight(true)((a, b) => p(a) && b)
 
   def takeWhile2(p: A => Boolean): Stream[A] =
-    foldRight(Empty:Stream[A])((a, b) => if (p(a)) cons(a, b) else b)
+    foldRight(Empty:Stream[A])((a, b) => if (p(a)) cons(a, b) else empty)
 
   def headOption2: Option[A] =
     foldRight(None:Option[A])((a, _) => Some(a))
@@ -67,14 +67,51 @@ sealed trait Stream[+A] {
   def flatMap[B](f: A => Iterable[B]): Stream[B] =
     foldRight(Empty:Stream[B])((a, b) => f(a).foldRight(b)((x, y) => cons(x, y)))
 
-  // map, take, takeWhile, zipWith
-  // def zipAll[B](s2: Stream[B]): Stream[(Option[A],Option[B])]
+  def map2[B](f: A => B): Stream[B] =
+    unfold(this)({
+      case Cons(hd, tl) => Some(f(hd()), tl())
+      case _ => None
+    })
 
-  // def startsWith[A](s: Stream[A]): Boolean
-  // def tails: Stream[Stream[A]]
+  def take2(n: Int): Stream[A] =
+    unfold((this, n))({
+      case (Cons(hd, tl), n) if n > 0 =>  Some(hd(), (tl(), n - 1))
+      case _ => None
+    })
 
-  //def hasSubsequence[A](s: Stream[A]): Boolean =
-  //        tails exists (_ startsWith s)
+  def takeWhile3(p: A => Boolean): Stream[A] =
+    unfold(this)({
+      case Cons(hd, tl) if p(hd()) =>  Some(hd(), tl())
+      case _ => None
+    })
+
+  def zipWith[B, C](bs: Stream[B])(f: (A, B) => C):Stream[C] =
+    unfold((this, bs))({
+      case (Cons(hd, tl), Cons(hd2, tl2)) =>  Some(f(hd(), hd2()), (tl(), tl2()))
+      case _ => None
+    })
+
+  def zipAll[B](bs: Stream[B]): Stream[(Option[A],Option[B])] = 
+    unfold((this, bs))({
+      case (Cons(hd, tl), Cons(hd2, tl2)) =>  Some((Some(hd()), Some(hd2())), (tl(), tl2()))
+      case (Cons(hd, tl), Empty) =>  Some((Some(hd()), None), (tl(), Empty))
+      case (Empty, Cons(hd2, tl2)) =>  Some((None, Some(hd2())), (Empty, tl2()))
+      case _ => None
+    })
+
+  def startsWith[A](s: Stream[A]): Boolean =
+    zipAll(s).takeWhile(!_._2.isEmpty) forAll {
+      case (x, y) => x == y
+    }
+
+  def tails: Stream[Stream[A]] = 
+    unfold(this)({
+      case r@Cons(hd, tl) => Some(r -> tl())
+      case _ => None
+    }) append Stream(empty)
+
+  def hasSubsequence[A](s: Stream[A]): Boolean =
+    tails exists (_ startsWith s)
 }
 
 
